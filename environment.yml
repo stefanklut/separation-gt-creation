@@ -1,0 +1,8 @@
+name: seperation-gt-creation
+channels:
+  - conda-forge
+
+dependencies:
+  - numpy
+  - imagesize
+  - pillow
