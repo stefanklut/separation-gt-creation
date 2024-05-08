@@ -11,7 +11,7 @@ from utils.path_utils import image_path_to_xml_path
 def get_arguments():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Create seperation ground truth")
+    parser = argparse.ArgumentParser(description="Create separation ground truth")
     io_args = parser.add_argument_group("IO")
     io_args.add_argument("-i", "--input", help="Train input folder/file", nargs="+", action="extend", type=str, required=True)
     io_args.add_argument("-o", "--output", help="Output folder", type=str)
