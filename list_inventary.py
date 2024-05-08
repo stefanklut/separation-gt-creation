@@ -19,6 +19,7 @@ def get_arguments():
 
 def main(args):
     logger = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.INFO)
 
     input_dirs = [Path(input_dir) for input_dir in args.input]
 
@@ -33,8 +34,10 @@ def main(args):
         for input_dir in input_dirs:
             inventory_dirs = [path for path in input_dir.iterdir() if path.is_dir()]
             random.shuffle(inventory_dirs)
+            total = {}
             for inventory_dir in inventory_dirs:
                 image_paths = get_file_paths(inventory_dir, supported_image_formats, disable_check=True)
+                total.update({inventory_dir.name: len(image_paths)})
                 if not image_paths:
                     logger.warning(f"No images found in {inventory_dir}")
                     continue
@@ -42,6 +45,10 @@ def main(args):
                     logger.info(f"Found {len(image_paths)} images in {inventory_dir}")
 
                 output_file.write(f"{inventory_dir.name}\n")
+
+        logger.info(f"Total images found: {sum(total.values())}")
+        logger.info(f"Max images found: {max(total.values())}")
+        logger.info(f"Min images found: {min(total.values())}")
 
 
 if __name__ == "__main__":
