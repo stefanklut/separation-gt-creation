@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import Counter, OrderedDict, defaultdict
 from pathlib import Path
 
 import imagesize
@@ -20,6 +20,37 @@ def get_arguments():
     return args
 
 
+def get_size_match(image_size1, image_size2, margin):
+    min_multiplier = 1.0 - margin
+    max_multiplier = 1.0 + margin
+    border_multiplier = 0.01
+    image1_width = image_size1[0]
+    image2_width = image_size2[0]
+    image1_height = image_size1[1]
+    image2_height = image_size2[1]
+    similar_height_width = (
+        image1_width * min_multiplier < image2_width < image1_width * max_multiplier
+        and image1_height * min_multiplier < image2_height < image1_height * max_multiplier
+    )
+    if similar_height_width:
+        return True
+    similar_height_half_width = (
+        image1_width * (1 - border_multiplier) * min_multiplier
+        < image2_width / 2
+        < image1_width * (1 - border_multiplier) * max_multiplier
+        and image1_height * min_multiplier < image2_height < image1_height * max_multiplier
+    )
+    if similar_height_half_width:
+        return True
+    similar_height_double_width = (
+        image1_width * min_multiplier < image2_width * (2 - border_multiplier) < image1_width * max_multiplier
+        and image1_height * min_multiplier < image2_height < image1_height * max_multiplier
+    )
+    if similar_height_double_width:
+        return True
+    return False
+
+
 def main(args):
     input_paths = get_file_paths(args.input, supported_image_formats, disable_check=True)
 
@@ -34,17 +65,21 @@ def main(args):
     for input_path_j in input_paths[1:]:
         if input_path_i.parent != input_path_j.parent:
             current_document = input_path_j.name
+            size_j = imagesize.get(input_path_j)
         else:
             size_j = imagesize.get(input_path_j)
-            if size_i != size_j:
+            if get_size_match(size_i, size_j, 0.05):
                 current_document = input_path_j.name
 
         separated_documents[current_document].append(input_path_j)
 
+        input_path_i = input_path_j
+        size_i = size_j
+
     count_documents = len(separated_documents)
     print(f"Found {count_documents} documents")
     count_lengths = Counter([len(images) for images in separated_documents.values()])
-    print(f"Found {dict(count_lengths)} documents with the given number of images")
+    print(f"Found {OrderedDict(sorted(count_lengths.items()))} documents with the given number of images")
 
     if args.output:
         output_path = Path(args.output)

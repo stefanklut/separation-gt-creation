@@ -1,4 +1,4 @@
-name: seperation-gt-creation
+name: separation-gt-creation
 channels:
   - conda-forge
 
@@ -6,3 +6,4 @@ dependencies:
   - numpy
   - imagesize
   - pillow
+  - natsort
