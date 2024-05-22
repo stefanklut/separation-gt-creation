@@ -1,11 +1,12 @@
+import logging
 from collections import Counter, OrderedDict, defaultdict
 from pathlib import Path
 
 import imagesize
+from openpyxl import Workbook
 
 from utils.copy_utils import copy_mode
 from utils.input_utils import get_file_paths, supported_image_formats
-from utils.path_utils import image_path_to_xml_path
 
 
 def get_arguments():
@@ -15,6 +16,15 @@ def get_arguments():
     io_args = parser.add_argument_group("IO")
     io_args.add_argument("-i", "--input", help="Train input folder/file", nargs="+", action="extend", type=str, required=True)
     io_args.add_argument("-o", "--output", help="Output folder", type=str)
+    
+    parser.add_argument(
+        "-m",
+        "--output-mode",
+        help="Output mode",
+        type=str,
+        choices=["xlsx", "dirs"],
+        default="xlsx",
+    )
 
     args = parser.parse_args()
     return args
@@ -52,51 +62,120 @@ def get_size_match(image_size1, image_size2, margin):
 
 
 def main(args):
-    input_paths = get_file_paths(args.input, supported_image_formats, disable_check=True)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    logging.basicConfig(format="%(levelname)s: %(message)s")
+    logging.basicConfig(level=logging.INFO)
 
-    separated_documents = defaultdict(list)
+    input_dirs = [Path(input_dir) for input_dir in args.input]
 
-    input_path_i = input_paths[0]
+    assert all([input_dir.is_dir() for input_dir in input_dirs]), "All input paths must be directories"
 
-    current_document = input_path_i.name
-    size_i = imagesize.get(input_path_i)
-    separated_documents[current_document].append(input_path_i)
+    separated_documents = {}
+    seen_inventory_numbers = set()
 
-    for input_path_j in input_paths[1:]:
-        if input_path_i.parent != input_path_j.parent:
-            current_document = input_path_j.name
-            size_j = imagesize.get(input_path_j)
-        else:
-            size_j = imagesize.get(input_path_j)
-            if get_size_match(size_i, size_j, 0.05):
-                current_document = input_path_j.name
+    for input_dir in input_dirs:
+        for sub_dir in input_dir.glob("*/"):
+            inventory_number = sub_dir.name
+            if inventory_number in seen_inventory_numbers:
+                raise ValueError(f"Duplicate inventory number: {inventory_number}")
+            seen_inventory_numbers.add(inventory_number)
 
-        separated_documents[current_document].append(input_path_j)
+            separated_documents[inventory_number] = {}
+            previous_image_size = None
+            for i, image_path in enumerate(get_file_paths(sub_dir, supported_image_formats, disable_check=True)):
+                if i == 0:
+                    image_size = imagesize.get(image_path)
+                    current_document = image_path.name
+                    separated_documents[inventory_number][current_document] = {
+                        "numbers": [i + 1],
+                        "sizes": [image_size],
+                        "paths": [image_path],
+                    }
+                else:
+                    image_size = imagesize.get(image_path)
+                    if get_size_match(previous_image_size, image_size, 0.1):
+                        separated_documents[inventory_number][current_document]["numbers"].append(i + 1)
+                        separated_documents[inventory_number][current_document]["sizes"].append(image_size)
+                        separated_documents[inventory_number][current_document]["paths"].append(image_path)
+                    else:
+                        current_document = image_path.name
+                        separated_documents[inventory_number][current_document] = {
+                            "numbers": [i + 1],
+                            "sizes": [image_size],
+                            "paths": [image_path],
+                        }
+                previous_image_size = image_size
 
-        input_path_i = input_path_j
-        size_i = size_j
+    for inventory_number, documents in separated_documents.items():
+        if len(documents) < 1:
+            print(f"Inventory number {inventory_number} has no documents")
+            continue
 
-    count_documents = len(separated_documents)
-    print(f"Found {count_documents} documents")
-    count_lengths = Counter([len(images) for images in separated_documents.values()])
-    print(f"Found {OrderedDict(sorted(count_lengths.items()))} documents with the given number of images")
+    total_documents = 0
+    length_of_documents = Counter()
 
-    if args.output:
+    for inventory_number, documents in separated_documents.items():
+        total_documents += len(documents)
+        length_of_documents += Counter([len(document["numbers"]) for document in documents.values()])
+
+    logger.info(f"Total inventory numbers: {len(separated_documents)}")
+    logger.info(
+        f"Total scans: {sum(length*number_of_documents for length, number_of_documents in length_of_documents.items())}"
+    )
+    logger.info(f"Total documents: {total_documents}")
+    logger.info(f"Document lengths: {OrderedDict(sorted(length_of_documents.items()))}")
+
+    if not args.output:
+        return
+
+    if args.output_mode == "xlsx":
+        assert args.output.endswith(".xlsx"), "Output file must be an xlsx file"
+        
+        workbook = Workbook()
+        workbook.remove(workbook["Sheet"])
+
+        main_sheet = workbook.create_sheet("Main")
+        
+        main_sheet["A1"] = "Inventory number"
+        main_sheet["B1"] = "Dossier link"
+        main_sheet["C1"] = "Number of documents"
+
+        for i, (inventory_number, documents) in enumerate(separated_documents.items(), start=2):
+            main_sheet[f"A{i}"] = f"=HYPERLINK(\"#'{inventory_number}'!A1\", \"{inventory_number}\")"
+            main_sheet[f"B{i}"] = f"https://cloud.spinque.com/oorlogvoorderechter/explore/dossier/{inventory_number}"
+            main_sheet[f"C{i}"] = len(documents)
+
+            inventory_sheet = workbook.create_sheet(inventory_number)
+            inventory_sheet["A1"] = "Start of document"
+            inventory_sheet["B1"] = "Number of pages"
+            inventory_sheet["C1"] = "Page numbers"
+
+            for j, (document_name, document) in enumerate(documents.items(), start=2):
+                inventory_sheet[f"A{j}"] = f"https://cloud.spinque.com/oorlogvoorderechter/explore/dossier/{inventory_number}/{document["numbers"][0]}"
+                inventory_sheet[f"B{j}"] = len(document["numbers"])
+                inventory_sheet[f"C{j}"] = ",".join(map(str, document["numbers"]))
+        
         output_path = Path(args.output)
-        for document_name, document_images in separated_documents.items():
-            document_dir = output_path.joinpath(document_name)
-            document_dir.mkdir(parents=True, exist_ok=True)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        workbook.save(output_path)
+        logger.info(f"Separation ground truth saved to {output_path}")
 
-            for image_path in document_images:
-                output_image_path = document_dir.joinpath(image_path.name)
-                copy_mode(image_path, output_image_path, mode="symlink")
+    if args.output_mode == "dirs":
+        output_dir = Path(args.output)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-                xml_path = image_path_to_xml_path(image_path, check=False)
-                if xml_path.exists():
-                    document_page_dir = document_dir.joinpath("page")
-                    document_page_dir.mkdir(parents=True, exist_ok=True)
-                    output_xml_path = document_page_dir.joinpath(xml_path.name)
-                    copy_mode(xml_path, output_xml_path, mode="symlink")
+        for inventory_number, documents in separated_documents.items():
+            inventory_number_dir = output_dir.joinpath(inventory_number)
+            inventory_number_dir.mkdir(parents=True, exist_ok=True)
+            for document_name, document in documents.items():
+                document_dir = inventory_number_dir.joinpath(document_name)
+                document_dir.mkdir(parents=True, exist_ok=True)
+                for image_path in document["paths"]:
+                    copy_mode(image_path, document_dir / image_path.name)
+
+        logger.info(f"Separation ground truth saved to {output_dir}")
 
 
 if __name__ == "__main__":
