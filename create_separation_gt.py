@@ -16,7 +16,7 @@ def get_arguments():
     io_args = parser.add_argument_group("IO")
     io_args.add_argument("-i", "--input", help="Train input folder/file", nargs="+", action="extend", type=str, required=True)
     io_args.add_argument("-o", "--output", help="Output folder", type=str)
-    
+
     parser.add_argument(
         "-m",
         "--output-mode",
@@ -131,34 +131,80 @@ def main(args):
 
     if args.output_mode == "xlsx":
         assert args.output.endswith(".xlsx"), "Output file must be an xlsx file"
-        
+
         workbook = Workbook()
         workbook.remove(workbook["Sheet"])
 
         main_sheet = workbook.create_sheet("Main")
-        
-        main_sheet["A1"] = "Inventory number"
-        main_sheet["B1"] = "Dossier link"
-        main_sheet["C1"] = "Number of documents"
+
+        main_a_title = "Inventory number"
+        main_b_title = "Dossier link"
+        main_c_title = "Number of documents"
+
+        main_sheet["A1"] = main_a_title
+        main_sheet["B1"] = main_b_title
+        main_sheet["C1"] = main_c_title
+
+        main_a_width = len(main_a_title)
+        main_b_width = len(main_b_title)
+        main_c_width = len(main_c_title)
 
         for i, (inventory_number, documents) in enumerate(separated_documents.items(), start=2):
-            main_sheet[f"A{i}"] = f"=HYPERLINK(\"#'{inventory_number}'!A1\", \"{inventory_number}\")"
-            main_sheet[f"B{i}"] = f"https://cloud.spinque.com/oorlogvoorderechter/explore/dossier/{inventory_number}"
+            main_sheet[f"A{i}"] = f'=HYPERLINK("#\'{inventory_number}\'!A1", "{inventory_number}")'
+            spinque_link = f"https://cloud.spinque.com/oorlogvoorderechter/explore/dossier/{inventory_number}"
+            main_sheet[f"B{i}"] = f'=HYPERLINK("{spinque_link}", "{spinque_link}")'
             main_sheet[f"C{i}"] = len(documents)
 
+            main_a_width = max(main_a_width, len(str(inventory_number)))
+            main_b_width = max(main_b_width, len(str(spinque_link)))
+            main_c_width = max(main_c_width, len(str(len(documents))))
+
             inventory_sheet = workbook.create_sheet(inventory_number)
-            inventory_sheet["A1"] = "Start of document"
-            inventory_sheet["B1"] = "Number of pages"
-            inventory_sheet["C1"] = "Page numbers"
+            inventory_a_title = "Start of document"
+            inventory_b_title = "Scan name"
+            inventory_c_title = "Number of pages"
+            inventory_d_title = "Page numbers"
+            inventory_sheet["A1"] = inventory_a_title
+            inventory_sheet["B1"] = inventory_b_title
+            inventory_sheet["C1"] = inventory_c_title
+            inventory_sheet["D1"] = inventory_d_title
+            length_a = len(inventory_a_title)
+            length_b = len(inventory_b_title)
+            length_c = len(inventory_c_title)
+            length_d = len(inventory_d_title)
 
             for j, (document_name, document) in enumerate(documents.items(), start=2):
-                inventory_sheet[f"A{j}"] = f"https://cloud.spinque.com/oorlogvoorderechter/explore/dossier/{inventory_number}/{document["numbers"][0]}"
-                inventory_sheet[f"B{j}"] = len(document["numbers"])
-                inventory_sheet[f"C{j}"] = ",".join(map(str, document["numbers"]))
-        
+                spinque_link = (
+                    f"https://cloud.spinque.com/oorlogvoorderechter/explore/dossier/{inventory_number}/{document['numbers'][0]}"
+                )
+                a = f'=HYPERLINK("{spinque_link}", "{spinque_link}")'
+                length_a = max(length_a, len(str(spinque_link)))
+                inventory_sheet[f"A{j}"] = a
+
+                b = document_name
+                length_b = max(length_b, len(b))
+                inventory_sheet[f"B{j}"] = b
+
+                c = len(document["numbers"])
+                length_c = max(length_c, len(str(c)))
+                inventory_sheet[f"C{j}"] = c
+
+                d = ",".join(map(str, document["numbers"]))
+                length_c = min(100, max(length_d, len(d)))
+                inventory_sheet[f"D{j}"] = c
+
+            inventory_sheet.column_dimensions["A"].width = length_a
+            inventory_sheet.column_dimensions["B"].width = length_b
+            inventory_sheet.column_dimensions["C"].width = length_c
+            inventory_sheet.column_dimensions["D"].width = length_d
+
+        main_sheet.column_dimensions["A"].width = main_a_width
+        main_sheet.column_dimensions["B"].width = main_b_width
+        main_sheet.column_dimensions["C"].width = main_c_width
+
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         workbook.save(output_path)
         logger.info(f"Separation ground truth saved to {output_path}")
 
