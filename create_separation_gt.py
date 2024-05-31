@@ -190,8 +190,8 @@ def main(args):
                 inventory_sheet[f"C{j}"] = c
 
                 d = ",".join(map(str, document["numbers"]))
-                length_c = min(100, max(length_d, len(d)))
-                inventory_sheet[f"D{j}"] = c
+                length_d = min(100, max(length_d, len(d)))
+                inventory_sheet[f"D{j}"] = d
 
             inventory_sheet.column_dimensions["A"].width = length_a
             inventory_sheet.column_dimensions["B"].width = length_b
