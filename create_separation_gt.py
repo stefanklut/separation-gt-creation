@@ -1,4 +1,5 @@
 import logging
+import re
 from collections import Counter, OrderedDict, defaultdict
 from pathlib import Path
 
@@ -82,8 +83,10 @@ def main(args):
             seen_inventory_numbers.add(inventory_number)
 
             separated_documents[inventory_number] = {}
+            current_document = None
             previous_image_size = None
-            for i, image_path in enumerate(get_file_paths(sub_dir, supported_image_formats, disable_check=True)):
+            i = 0
+            for image_path in get_file_paths(sub_dir, supported_image_formats, disable_check=True):
                 if i == 0:
                     image_size = imagesize.get(image_path)
                     current_document = image_path.name
@@ -94,6 +97,12 @@ def main(args):
                     }
                 else:
                     image_size = imagesize.get(image_path)
+                    # check if ends in deelopname1, deelopname2, etc.
+                    if re.match(r".*deelopname\d+$", image_path.stem):
+                        separated_documents[inventory_number][current_document]["numbers"].append(i)
+                        separated_documents[inventory_number][current_document]["sizes"].append(image_size)
+                        separated_documents[inventory_number][current_document]["paths"].append(image_path)
+                        continue
                     if get_size_match(previous_image_size, image_size, 0.1):
                         separated_documents[inventory_number][current_document]["numbers"].append(i + 1)
                         separated_documents[inventory_number][current_document]["sizes"].append(image_size)
@@ -106,6 +115,7 @@ def main(args):
                             "paths": [image_path],
                         }
                 previous_image_size = image_size
+                i += 1
 
     for inventory_number, documents in separated_documents.items():
         if len(documents) < 1:
