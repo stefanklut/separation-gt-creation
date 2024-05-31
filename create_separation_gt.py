@@ -150,9 +150,11 @@ def main(args):
         main_c_width = len(main_c_title)
 
         for i, (inventory_number, documents) in enumerate(separated_documents.items(), start=2):
-            main_sheet[f"A{i}"] = f'=HYPERLINK("#\'{inventory_number}\'!A1", "{inventory_number}")'
+            main_sheet[f"A{i}"] = inventory_number
+            main_sheet[f"A{i}"].hyperlink = f"#'{inventory_number}'!A1"
             spinque_link = f"https://cloud.spinque.com/oorlogvoorderechter/explore/dossier/{inventory_number}"
-            main_sheet[f"B{i}"] = f'=HYPERLINK("{spinque_link}", "{spinque_link}")'
+            main_sheet[f"B{i}"] = spinque_link
+            main_sheet[f"B{i}"].hyperlink = spinque_link
             main_sheet[f"C{i}"] = len(documents)
 
             main_a_width = max(main_a_width, len(str(inventory_number)))
@@ -177,21 +179,20 @@ def main(args):
                 spinque_link = (
                     f"https://cloud.spinque.com/oorlogvoorderechter/explore/dossier/{inventory_number}/{document['numbers'][0]}"
                 )
-                a = f'=HYPERLINK("{spinque_link}", "{spinque_link}")'
                 length_a = max(length_a, len(str(spinque_link)))
-                inventory_sheet[f"A{j}"] = a
+                inventory_sheet[f"A{j}"] = spinque_link
+                inventory_sheet[f"A{j}"].hyperlink = spinque_link
 
-                b = document_name
-                length_b = max(length_b, len(b))
-                inventory_sheet[f"B{j}"] = b
+                length_b = max(length_b, len(document_name))
+                inventory_sheet[f"B{j}"] = document_name
 
-                c = len(document["numbers"])
-                length_c = max(length_c, len(str(c)))
-                inventory_sheet[f"C{j}"] = c
+                number_of_pages = len(document["numbers"])
+                length_c = max(length_c, len(str(number_of_pages)))
+                inventory_sheet[f"C{j}"] = number_of_pages
 
-                d = ",".join(map(str, document["numbers"]))
-                length_d = min(100, max(length_d, len(d)))
-                inventory_sheet[f"D{j}"] = d
+                page_numbers = ",".join(map(str, document["numbers"]))
+                length_d = min(100, max(length_d, len(page_numbers)))
+                inventory_sheet[f"D{j}"] = page_numbers
 
             inventory_sheet.column_dimensions["A"].width = length_a
             inventory_sheet.column_dimensions["B"].width = length_b
